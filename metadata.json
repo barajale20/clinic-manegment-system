@@ -1,0 +1,6 @@
+{
+  "name": "CarePoint Clinic Management System",
+  "description": "A modern, professional healthcare clinic management system with dedicated portals for Administrators and Doctors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
