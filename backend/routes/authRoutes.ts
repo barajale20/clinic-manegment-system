@@ -1,11 +1,37 @@
-import { Router } from 'express';
-import { login, getCurrentUser, forgotPassword } from '../controllers/authController.ts';
-import { authenticateUser, requireAuth } from '../middleware/authMiddleware.ts';
 
-const router = Router();
+import express from 'express';
 
+import {
+  register,
+  login,
+  getPendingUsers,
+  updateUserStatus,
+} from '../controllers/authController';
+
+import {
+  protect,
+  adminOnly,
+} from '../middleware/authMiddleware';
+
+const router = express.Router();
+
+// Public authentication routes
+router.post('/register', register);
 router.post('/login', login);
-router.post('/forgot-password', forgotPassword);
-router.get('/me', authenticateUser, requireAuth, getCurrentUser);
+
+// Admin-only user management routes
+router.get(
+  '/pending-users',
+  protect,
+  adminOnly,
+  getPendingUsers
+);
+
+router.put(
+  '/users/:userId/status',
+  protect,
+  adminOnly,
+  updateUserStatus
+);
 
 export default router;

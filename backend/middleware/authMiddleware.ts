@@ -1,94 +1,122 @@
-import { Request, Response, NextFunction } from 'express';
-import { UserCollection } from '../config/store.ts';
 
-export interface AuthenticatedUser {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'doctor';
-  avatar?: string;
-  phone?: string;
-  specialization?: string;
-  licenseNumber?: string;
-}
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import User from '../models/User';
 
 export interface AuthRequest extends Request {
-  user?: AuthenticatedUser;
+  user?: {
+    id: string;
+    role: string;
+    status?: string;
+    email?: string;
+    fullName?: string;
+  };
 }
 
-export const authenticateUser = async (req: AuthRequest, _res: Response, next: NextFunction) => {
+interface TokenPayload extends jwt.JwtPayload {
+  id: string;
+}
+
+export const protect = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   const authHeader = req.headers.authorization;
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next();
+    res.status(401).json({
+      message: 'Not authorized, no valid token provided.',
+    });
+    return;
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.slice(7).trim();
+
   if (!token) {
-    return next();
+    res.status(401).json({
+      message: 'Token is missing.',
+    });
+    return;
   }
 
   try {
-    // Handle demo JWT tokens formatted as jwt-carepoint-[userId]-[timestamp] or standard string
-    let userId = '';
-    if (token.startsWith('jwt-carepoint-')) {
-      const parts = token.split('-');
-      // format: jwt-carepoint-[id-part1]-[id-part2]-...-[timestamp]
-      // or check all users
-      const allUsers = await UserCollection.find();
-      const matched = allUsers.find((u) => token.includes(u.id));
-      if (matched) {
-        req.user = matched;
-        return next();
-      }
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      res.status(500).json({
+        message: 'Server authentication configuration error.',
+      });
+      return;
     }
 
-    // Default lookup by ID or token match
-    const user = await UserCollection.findOne({ id: userId });
-    if (user) {
-      req.user = user;
+    const decoded = jwt.verify(token, secret);
+
+    if (
+      typeof decoded === 'string' ||
+      typeof decoded.id !== 'string' ||
+      !decoded.id
+    ) {
+      res.status(401).json({
+        message: 'Invalid token payload.',
+      });
+      return;
     }
+
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user || user.status !== 'approved') {
+      res.status(401).json({
+        message: 'Account not found or not approved.',
+      });
+      return;
+    }
+
+    req.user = {
+      id: String(user._id),
+      role: String(user.role),
+      status: String(user.status),
+      email: user.email,
+      fullName: user.fullName,
+    };
+
+    next();
   } catch (error) {
-    console.error('Error authenticating user token:', error);
-  }
-
-  next();
-};
-
-export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication Required',
-      message: 'You must provide a valid authorization token to access this resource.',
+    res.status(401).json({
+      message: 'Not authorized, token invalid or expired.',
     });
   }
-  next();
 };
 
-export const requireRole = (...allowedRoles: Array<'admin' | 'doctor'>) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
-    // Check if user is authenticated
-    if (!req.user) {
-      // Fallback: check query or header for demo simulation if header missing
-      const fallbackRole = (req.headers['x-user-role'] as 'admin' | 'doctor') || (req.query.role as 'admin' | 'doctor');
-      if (fallbackRole && allowedRoles.includes(fallbackRole)) {
-        return next();
-      }
+// Hubi in user-ku soo galay oo la xaqiijiyey.
+export const authenticateUser = protect;
 
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Authentication token missing or invalid.',
+// Hubi role-ka user-ka.
+export const requireRole = (role: string) => {
+  return (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ): void => {
+    if (!req.user) {
+      res.status(401).json({
+        message: 'Please log in first.',
       });
+      return;
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({
-        error: 'Access Denied: RBAC Authorization Failed',
-        message: `Your current role '${req.user.role}' is not authorized to access this resource. Required role: ${allowedRoles.join(' or ')}.`,
-        userRole: req.user.role,
-        allowedRoles,
+    const userRole = String(req.user.role ?? '').toLowerCase();
+    const requiredRole = role.toLowerCase();
+
+    if (userRole !== requiredRole) {
+      res.status(403).json({
+        message: 'Access denied: insufficient permissions.',
       });
+      return;
     }
 
     next();
   };
 };
+
+export const adminOnly = requireRole('admin');

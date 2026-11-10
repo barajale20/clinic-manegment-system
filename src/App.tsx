@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClinicProvider, useClinic } from './context/ClinicContext';
 import { LoginPage } from './components/auth/LoginPage';
+import { RegisterPage } from './components/auth/Registration';
 import { Sidebar } from './components/common/Sidebar';
 import { Header } from './components/common/Header';
 import { ToastContainer } from './components/common/ToastContainer';
@@ -39,9 +40,16 @@ const MainLayout: React.FC = () => {
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [selectedPatientForDoctorDetail, setSelectedPatientForDoctorDetail] = useState<Patient | null>(null);
+  
+  // State to toggle between 'login' and 'register' when not authenticated
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
+  // Haddii uusan qofku logged-in ahayn, waxaa si adag loogu celinayaa Login ama Register
   if (!isAuthenticated) {
-    return <LoginPage />;
+    if (authMode === 'register') {
+      return <RegisterPage onSwitchToLogin={() => setAuthMode('login')} />;
+    }
+    return <LoginPage onSwitchToRegister={() => setAuthMode('register')} />;
   }
 
   const isAdmin = currentUser?.role === 'admin';
@@ -52,7 +60,7 @@ const MainLayout: React.FC = () => {
   let pageSubtitle = 'Overview of your clinic’s activities.';
 
   if (currentTab === 'dashboard') {
-    pageTitle = isAdmin ? 'Admin Dashboard' : `Good morning, ${currentUser?.name.split(' ')[0] === 'Dr.' ? currentUser?.name : `Dr. ${currentUser?.name}`}`;
+    pageTitle = isAdmin ? 'Admin Dashboard' : `Good morning, ${currentUser?.name?.startsWith('Dr.') ? currentUser?.name : `Dr. ${currentUser?.name}`}`;
     pageSubtitle = isAdmin ? 'Clinic operations, stats, and administration summary.' : 'Here is your clinical schedule and patient queue for today.';
   } else if (currentTab === 'patients') {
     pageTitle = isAdmin ? 'Patients Management' : 'My Patients';

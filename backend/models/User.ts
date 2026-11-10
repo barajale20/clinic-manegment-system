@@ -1,34 +1,90 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
+import bcrypt from 'bcrypt';
 
-export type UserRole = 'admin' | 'doctor';
+export const USER_ROLES = [
+  'Admin',
+  'Doctor',
+  'Patient',
+  'Nurse',
+  'Receptionist',
+  'Pharmacist',
+  'Lab Technician',
+  'Accountant',
+] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+export type UserStatus = 'pending' | 'approved' | 'rejected';
 
 export interface IUser extends Document {
-  id: string;
-  name: string;
+  fullName: string;
   email: string;
-  password?: string;
+  password: string;
   role: UserRole;
-  avatar?: string;
-  phone?: string;
-  specialization?: string;
-  licenseNumber?: string;
+  status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
+  comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-export const UserSchema = new Schema<IUser>(
+const UserSchema = new Schema<IUser>(
   {
-    id: { type: String, required: true, unique: true },
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, default: 'password123' },
-    role: { type: String, enum: ['admin', 'doctor'], required: true },
-    avatar: { type: String },
-    phone: { type: String },
-    specialization: { type: String },
-    licenseNumber: { type: String },
+    fullName: {
+      type: String,
+      required: [true, 'Full name is required'],
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
+      lowercase: true,
+      trim: true,
+      unique: true,
+      index: true,
+      match: [
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+        'Please provide a valid email address',
+      ],
+    },
+    password: {
+      type: String,
+      required: [true, 'Password is required'],
+      minlength: [6, 'Password must be at least 6 characters'],
+      select: false,
+    },
+    role: {
+      type: String,
+      enum: USER_ROLES,
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-export const UserModel = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+UserSchema.pre('save', async function () {
+  if (!this.isModified('password')) {
+    return;
+  }
+  this.password = await bcrypt.hash(this.password, 12);
+});
+
+UserSchema.methods.comparePassword = async function (
+  candidatePassword: string
+): Promise<boolean> {
+  if (!this.password || !candidatePassword) {
+    return false;
+  }
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+const User: Model<IUser> =
+  (mongoose.models.User as Model<IUser>) ||
+  mongoose.model<IUser>('User', UserSchema);
+
+export default User;
