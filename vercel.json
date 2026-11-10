@@ -1,7 +1,27 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "backend/app.ts", "use": "@vercel/node" },
-    { "src": "app/package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": "app",
+      "framework": "vite"
+    },
+    "backend": {
+      "root": "backend",
+      "framework": "express"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    }
   ]
 }
